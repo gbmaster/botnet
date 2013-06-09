@@ -16,11 +16,11 @@ int main()
 	/*
 	 * Network initialization (actually needed only Windows)
 	 */
-	if(!net_initialize())
-	{
-		WriteLog("Unable to initialize the network");
-		return -1;
-	}
+    if(!net_initialize())
+    {
+	WriteLog("Unable to initialize the network");
+	return -1;
+    }
 
     std::list<Contact *> peer_list;
     std::list<Contact *>& bootstrap_list = Kad::get_instance().get_bootstrap_peers();

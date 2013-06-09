@@ -108,7 +108,6 @@ inline std::ostream& operator << (std::ostream &stream, const Contact &contact)
     uint32_t ip_address = contact.get_ip_address();
     ret << "ip_address=" << ip_to_str(ip_address) << ":" << contact.get_udp_port() << " (" << contact.get_tcp_port() << "), ";
     ret << "contact_id=" << contact.get_contact_id() << ", ";
-    ret << "distance=" << contact.get_distance() << ", ";
     ret << "version=" << (uint16_t)(contact.get_version()) << ";";
 
     stream << ret.str();
