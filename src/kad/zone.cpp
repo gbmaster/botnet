@@ -69,8 +69,7 @@ bool Zone::add(Contact *contact)
             old_contact->update_type();
 
             // Put the contact on the top of the list
-            _subnet->remove(old_contact, false);
-            _subnet->add(old_contact);
+            _subnet->make_youngest(old_contact);
 
             return false;
         }

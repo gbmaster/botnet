@@ -134,3 +134,9 @@ bool KBucket::is_ip_present(uint32_t ip_address)
 
     return false;
 }
+
+void KBucket::make_youngest(Contact *contact)
+{
+    remove(contact, false);
+    add(contact);
+}

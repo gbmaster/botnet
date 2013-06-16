@@ -143,8 +143,7 @@ void RoutingTable::maintain_table()
         if(contact != NULL && (contact->get_expiration() >= now || contact->get_type() == PROMPTED_FOR_DELETION))
         {
             // "Promote" it in order to not catch it again at the next step
-            kBucket->remove(contact, false);
-            kBucket->add(contact);
+            kBucket->make_youngest(contact);
             contact = NULL;
         }
 

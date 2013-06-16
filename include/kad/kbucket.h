@@ -27,6 +27,7 @@ class KBucket
         Contact* get_random_contact();
         Contact* get_oldest_contact();
         bool is_ip_present(uint32_t ip_address);
+        void make_youngest(Contact *contact);
 
         void update_contact(Contact *contact);
         void add(Contact *contact);
