@@ -24,7 +24,7 @@ inline std::string get_date_time()
     char buffer[20];
     time_t now = time(NULL);
 
-    struct tm *t = gmtime(&now);
+    struct tm *t = localtime(&now);
 
     strftime(buffer, sizeof(buffer), "%d-%m-%Y %H:%M:%S", t);
 
