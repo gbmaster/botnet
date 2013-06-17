@@ -52,7 +52,7 @@ SOCKET tcp_listen(uint16_t port)
     memset(&saddr, 0, sizeof(struct sockaddr_in));
     saddr.sin_family = AF_INET;
     saddr.sin_port = htons(port);
-    saddr.sin_addr.s_addr = INADDR_ANY;
+    saddr.sin_addr.s_addr = htonl(INADDR_ANY);
 
     if(bind(s, (struct sockaddr *)&saddr, sizeof(struct sockaddr_in)) == SOCKET_ERROR)
     {
