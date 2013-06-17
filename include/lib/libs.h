@@ -16,8 +16,6 @@
 #define SOCKET_ERROR -1
 
 time_t get_current_time();
-int enter_critical_section(pthread_mutex_t *mutex);
-int leave_critical_section(pthread_mutex_t *mutex);
 
 #elif defined _WIN32
 
@@ -29,8 +27,6 @@ typedef unsigned __int32 uint32_t;
 typedef int socklen_t;
 
 DWORD get_current_time();
-void enter_critical_section(LPCRITICAL_SECTION mutex);
-void leave_critical_section(LPCRITICAL_SECTION mutex);
 
 #else
 #error OS not supported

@@ -39,37 +39,14 @@ class RoutingTable
 
         void maintain_table();
 
-#ifdef __linux__
-        pthread_mutex_t& get_contactlist_mutex() { return _contactlist_mutex; }
-#elif defined _WIN32
-        CRITICAL_SECTION& get_contactlist_mutex() { return _contactlist_mutex; }
-#else
-#error OS not supported
-#endif
-
     private:
         RoutingTable();
         RoutingTable(const RoutingTable &);
         RoutingTable& operator = (const RoutingTable&);
 
         Zone *_root;
-#ifdef __linux
-        pthread_mutex_t _contactlist_mutex;
-#elif defined _WIN32
-		CRITICAL_SECTION _contactlist_mutex;
-#else
-#error OS not supported
-#endif
 
         time_t _last_leaves_merge;
-
-#ifdef __linux__
-        pthread_t _hThread;
-#elif defined _WIN32
-        HANDLE _hThread;
-#else
-#error OS not supported
-#endif
 };
 
 #endif

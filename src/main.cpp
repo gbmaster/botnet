@@ -32,21 +32,22 @@ int main()
     // Contact *tmp_contact = new Contact(uint128_t::get_from_buffer(id), 0xB501A8C0, 9734, 123, 9, 0, false);
     // peer_list.push_back(tmp_contact);
 
-    enter_critical_section(&(RoutingTable::get_instance().get_contactlist_mutex()));
     for(std::list<Contact *>::const_iterator contIt = peer_list.begin();
         contIt != peer_list.end();
         contIt++)
     {
         RoutingTable::get_instance().add(*contIt);
     }
-    leave_critical_section(&(RoutingTable::get_instance().get_contactlist_mutex()));
     WriteLog("Added " << peer_list.size() << " nodes and " << bootstrap_list.size() << " bootstrap nodes");
+
+    time_t next_routingtable_check = 0;
 
     while(active)
     {
+        time_t now = get_current_time();
+
         millisec_sleep(20);
 
-        enter_critical_section(&(RoutingTable::get_instance().get_contactlist_mutex()));
         Kad::get_instance().retrieve_and_dispatch_potential_packet();
         TCPServer::get_instance().retrieve_and_dispatch_potential_packet();
 
@@ -56,7 +57,13 @@ int main()
             Kad::get_instance().bootstrap();
             millisec_sleep(1980);
         }
-        leave_critical_section(&(RoutingTable::get_instance().get_contactlist_mutex()));
+
+        // Check the routing table every 60 seconds
+        if(RoutingTable::get_instance().get_num_contacts() > 0 && next_routingtable_check <= now)
+        {
+            RoutingTable::get_instance().maintain_table();
+            next_routingtable_check = now + 60;
+        }
 	}
 
     return 0;
