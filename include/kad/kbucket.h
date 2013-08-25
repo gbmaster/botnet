@@ -25,6 +25,7 @@ class KBucket
         Contact* get_contact(const uint128_t& contact_id);
         Contact* get_contact_by_ip(uint32_t ip_address, uint16_t port, bool is_tcp = false);
         Contact* get_random_contact();
+        void get_nearest_contacts(KadContactType maxType, const uint128_t& target, const uint128_t& distance, uint32_t max_required, std::list<const Contact *>& results);
         Contact* get_oldest_contact();
         bool is_ip_present(uint32_t ip_address);
         void make_youngest(Contact *contact);

@@ -4,6 +4,7 @@
 #include "lib/libs.h"
 #include "kad/firewall.h"
 #include "kad/routingtable.h"
+#include "kad/search.h"
 #include "lib/tag.h"
 
 #define KAD_VERSION 9
@@ -21,6 +22,8 @@
 #define KADEMLIA2_BOOTSTRAP_RES  0x09
 #define KADEMLIA2_HELLO_REQ      0x11
 #define KADEMLIA2_HELLO_RES      0x19
+#define KADEMLIA2_REQ            0x21
+#define KADEMLIA2_RES            0x29
 #define KADEMLIA_FIREWALLED2_REQ 0x53
 #define KADEMLIA_FIREWALLED_RES  0x58
 #define KADEMLIA2_PING           0x60
@@ -39,29 +42,46 @@ class Kad
 
         void bootstrap();
 
+        /*
+         * Sends a generic KAD packet to ip_address:port contact_id encrypted with udp_key (or the contact_id)
+         */
         bool send_kad_packet(uint32_t ip_address,
                              uint16_t port,
                              const uint128_t& contact_id,
                              const KadUDPKey udp_key,
-                             const unsigned char type,
+                             unsigned char type,
                              const unsigned char *payload,
-                             const uint32_t length);
+                             uint32_t length);
 
+        /*
+         * Sends a KADEMLIA2_HELLO_REQ to contact
+         */
         bool send_hello_request(const Contact* contact, bool is_ack_requested);
 
+        /*
+         * Sends a KADEMLIA2_REQ to contact
+         */
+        bool send_request(const Contact* contact, uint8_t max_responses, const uint128_t& target);
+
+        /*
+         * Checks if there is an incoming packet and dispatches it
+         */
         void retrieve_and_dispatch_potential_packet();
 
         unsigned char get_connect_options(bool encryption, bool callback)
         {
             unsigned char options;
 
-            options = callback ? (Firewall::get_instance().is_udp_firewalled() & Firewall::get_instance().is_verified()) << 4 : 0;
+            options = callback ? (Firewall::get_instance().is_udp_firewalled() & Firewall::get_instance().is_udp_verified()) << 4 : 0;
             // Encryption is always supported
             options |= encryption ? (1 << 3) | (1 << 2) | (1 << 1) : 0;
 
             return options;
         }
 
+        /*
+         * These ones retrieve the information about the local Kad contact
+         */
         const uint128_t& get_client_id() const { return _kad_client_id; }
         uint32_t get_public_ip() const { return _public_ip_address; }
         uint16_t get_udp_port() const { return _kad_udp_port; }
@@ -76,8 +96,14 @@ class Kad
             return ((*(uint32_t *)digest) ^ (*(uint32_t *)(digest + 4)) ^ (*(uint32_t *)(digest + 8)) ^ (*(uint32_t *)(digest + 12))) % 0xFFFFFFFE + 1;
         }
 
+        /*
+         * The UDP socket used for communications
+         */
         SOCKET get_socket() { return _sock; }
 
+        /*
+         * The list containing all the peers used to bootstrap the network
+         */
         std::list<Contact *>& get_bootstrap_peers() { return _bootstrap_peers; }
 
     private:
@@ -87,36 +113,65 @@ class Kad
 
         void set_last_contact() { _last_contact = get_current_time(); }
 
+        /*
+         * Sends a KADEMLIA2_BOOTSTRAP_REQ to contact
+         */
         bool send_bootstrap_request(const Contact *contact);
-        bool process_bootstrap_response(const unsigned char *buffer, const uint32_t length);
+        /*
+         * Processes a KADEMLIA2_BOOTSTRAP_RES message
+         */
+        bool process_bootstrap_response(const unsigned char *buffer, uint32_t length, uint32_t ip_address);
 
+        /*
+         * Processes a KADEMLIA2_HELLO_REQ message
+         */
         bool process_hello_response(const unsigned char *buffer,
-                                    const uint32_t length,
+                                    uint32_t length,
                                     uint32_t ip_address,
                                     uint16_t port,
                                     KadUDPKey& udp_key,
                                     bool is_recv_key_valid);
 
+        /*
+         * Processes a KADEMLIA_FIREWALLED_RES message
+         */
         bool process_firewalled_response(const unsigned char *buffer,
-                                         const uint32_t length,
+                                         uint32_t length,
                                          uint32_t ip_address,
                                          uint16_t udp_port);
 
+        /*
+         * Sends a KADEMLIA2_PING to contact
+         */
         bool send_ping(const Contact *contact);
+        /*
+         * Processes a KADEMLIA2_PONG message
+         */
         bool process_pong(const unsigned char *buffer,
-                          const uint32_t length,
+                          uint32_t length,
                           uint32_t ip_address,
                           uint16_t udp_port);
 
+        /*
+         * Processes a KADEMLIA2_RES message
+         */
+        bool process_response(const unsigned char *buffer,
+                              uint32_t length,
+                              uint32_t ip_address,
+                              uint16_t udp_port);
+
+        /*
+         * Functions used to (de)obfuscate a packet
+         */
         void deobfuscate_packet(unsigned char *in_buffer,
-                                const uint32_t in_buffer_length,
+                                uint32_t in_buffer_length,
                                 unsigned char** out_buffer,
                                 uint32_t* out_buffer_length,
                                 uint32_t ip_address,
                                 uint32_t* receiver_key,
                                 uint32_t* sender_key);
         void obfuscate_packet(unsigned char* in_buffer,
-                              const uint32_t in_buffer_length,
+                              uint32_t in_buffer_length,
                               unsigned char* out_buffer,
                               uint32_t* out_buffer_length,
                               unsigned char *client_id_data,

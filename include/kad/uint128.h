@@ -48,6 +48,54 @@ class uint128_t
          * Bit-wise operations
          */
 
+        // AND
+        template <typename T> uint128_t operator & (T value)
+        {
+            return uint128_t(_hi, _lo & (uint64_t)value);
+        }
+
+        uint128_t operator & (uint128_t value)
+        {
+            return uint128_t(_hi & value._hi, _lo & value._lo);
+        }
+
+        template <typename T> uint128_t operator &= (T value)
+        {
+            _lo &= (uint64_t)value;
+            return *this;
+        }
+
+        uint128_t operator &= (const uint128_t value)
+        {
+            _hi &= value._hi;
+            _lo &= value._lo;
+            return *this;
+        }
+
+        // OR
+        template <typename T> uint128_t operator | (T value)
+        {
+            return uint128_t(_hi, _lo | (uint64_t)value);
+        }
+
+        uint128_t operator | (uint128_t value)
+        {
+            return uint128_t(_hi | value._hi, _lo | value._lo);
+        }
+
+        template <typename T> uint128_t operator |= (T value)
+        {
+            _lo |= (uint64_t)value;
+            return *this;
+        }
+
+        uint128_t operator |= (const uint128_t value)
+        {
+            _hi |= value._hi;
+            _lo |= value._lo;
+            return *this;
+        }
+
         // XOR
         template <typename T> uint128_t operator ^ (T value)
         {
@@ -73,7 +121,7 @@ class uint128_t
         }
 
         // SHIFT RIGHT
-        template <typename T> uint128_t operator >> (const T shift)
+        template <typename T> uint128_t operator >> (const T shift) const
         {
             if (shift >= 128)
                 return uint128_t(0, 0);
@@ -183,7 +231,7 @@ class uint128_t
             return _lo;
         }
 
-        unsigned char get_bit(unsigned char bit)
+        const unsigned char get_bit(unsigned char bit) const
         {
             return (*this >> (bit - 1)).low() & 1;
         }

@@ -1,4 +1,5 @@
 #include "kad/kad.h"
+#include "kad/search.h"
 #include "kad/zone.h"
 #include "log/log.h"
 
@@ -10,6 +11,8 @@ Zone::Zone(Zone *parent, uint128_t index, unsigned int level)
 
     _left_child = NULL;
     _right_child = NULL;
+
+    _next_big_timer = 0;
 }
 
 Zone::Zone(Zone *parent, uint128_t index, unsigned int level, KBucket *kBucket)
@@ -22,6 +25,8 @@ Zone::Zone(Zone *parent, uint128_t index, unsigned int level, KBucket *kBucket)
     _right_child = NULL;
 
     _subnet = kBucket;
+
+    _next_big_timer = 0;
 }
 
 bool Zone::add(Contact *contact)
@@ -169,6 +174,30 @@ const Contact *Zone::get_random_contact()
     }
 }
 
+void Zone::get_nearest_contacts(KadContactType maxType, const uint128_t& target, const uint128_t& distance, uint32_t max_required, std::list<const Contact *>& results)
+{
+    if(is_leaf())
+    {
+        _subnet->get_nearest_contacts(maxType, target, distance, max_required, results);
+    }
+    else
+    {
+        if(distance.get_bit(_level))
+            _right_child->get_nearest_contacts(maxType, target, distance, max_required, results);
+        else
+            _left_child->get_nearest_contacts(maxType, target, distance, max_required, results);
+
+        // If we didn't collect enough results, try to search in the other branch
+        if(results.size() < max_required)
+        {
+            if(distance.get_bit(_level))
+                _left_child->get_nearest_contacts(maxType, target, distance, max_required, results);
+            else
+                _right_child->get_nearest_contacts(maxType, target, distance, max_required, results);
+        }
+    }
+}
+
 unsigned int Zone::get_num_contacts()
 {
     if(is_leaf())
@@ -257,4 +286,42 @@ bool Zone::is_ip_present(uint32_t ip_address)
         ret = _right_child->is_ip_present(ip_address);
 
     return ret;
+}
+
+void Zone::process_big_timer()
+{
+    if(is_leaf())
+    {
+        if(_index < 5 || _level < 4 || _subnet->get_num_contacts() < K * 0.8)
+        {
+            time_t now = get_current_time();
+            // Do we need a new random lookup ?
+            if(_next_big_timer <= now)
+            {
+                // Create a random contact ID
+                uint128_t fake_target(_index);
+                fake_target <<= (128 - _level);
+                fake_target <<= _level;
+                for(unsigned int i = 0; i < _level; i++)
+                {
+                    char bit = rand() % 2;
+                    if(bit)
+                        fake_target |= (1 << i);
+                    else
+                        fake_target &= ~(1 << i);
+                }
+                fake_target ^= Kad::get_instance().get_client_id();
+
+                Search::get_instance().find_node(fake_target);
+
+                // Next scan in 1 hour
+                _next_big_timer = now + 3600;
+            }
+        }
+    }
+    else
+    {
+        _left_child->process_big_timer();
+        _right_child->process_big_timer();
+    }
 }

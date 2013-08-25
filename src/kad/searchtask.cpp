@@ -1,26 +1,27 @@
 #include "kad/searchtask.h"
 #include "kad/kad.h"
 
-SearchTask::SearchTask(const uint128_t& id, SearchType type) : _id(id), _type(type)
+SearchTask::SearchTask(const uint128_t& id, SearchType type) : _id(id)
 {
     _creation_time = get_current_time();
+    _type = type;
 }
 
 void SearchTask::start()
 {
     if (_possible_contacts.empty())
     {
-        uint128_t distance = _id ^ Kad::get_instance().get_client_id();
+        const uint128_t distance = _id ^ Kad::get_instance().get_client_id();
         RoutingTable::get_instance().get_nearest_contacts(JUST_CREATED, _id, distance, 50, _possible_contacts);
     }
 
     // If we have some contacts to send the request to, let's do it
     if (!_possible_contacts.empty())
     {
-        std::list<Contact *>::iterator contIt = _possible_contacts.begin();
+        std::list<const Contact *>::iterator contIt = _possible_contacts.begin();
         for (uint32_t i = 0; i < get_req_count(); i++)
         {
-            Contact *contact = *contIt;
+            const Contact *contact = *contIt;
 
             // Move the contact to the used ones
             _possible_contacts.erase(contIt);
@@ -41,7 +42,7 @@ void SearchTask::push_search()
         // Nothing to push
         return;
 
-    Contact* contact = *(_possible_contacts.begin());
+    const Contact* contact = *(_possible_contacts.begin());
 
     _possible_contacts.erase(_possible_contacts.begin());
     _used_contacts.push_back(contact);
@@ -84,16 +85,16 @@ bool SearchTask::in_tolerance_zone(const uint128_t& target, const uint128_t& sou
 
 void SearchTask::process_response(uint32_t ip_address, uint16_t udp_port, std::list<Contact*>& results)
 {
-    std::list<Contact*> alpha;
+    std::list<const Contact*> alpha;
 
     for(std::list<Contact*>::const_iterator contIt = results.begin();
         contIt != results.end();
         contIt++)
     {
-        Contact* contact = *contIt;
+        const Contact* contact = *contIt;
         bool should_be_skipped = false;
 
-        for(std::list<Contact*>::const_iterator usedContIt = _used_contacts.begin();
+        for(std::list<const Contact*>::const_iterator usedContIt = _used_contacts.begin();
             usedContIt != _used_contacts.end();
             usedContIt++)
         {
@@ -101,7 +102,7 @@ void SearchTask::process_response(uint32_t ip_address, uint16_t udp_port, std::l
                 should_be_skipped = true;
         }
 
-        for(std::list<Contact*>::const_iterator possContIt = _possible_contacts.begin();
+        for(std::list<const Contact*>::const_iterator possContIt = _possible_contacts.begin();
             possContIt != _possible_contacts.end();
             possContIt++)
         {
@@ -128,7 +129,7 @@ void SearchTask::process_response(uint32_t ip_address, uint16_t udp_port, std::l
     // Send again the request to these guys
     if(alpha.size() > 0)
     {
-        for(std::list<Contact*>::const_iterator contIt = alpha.begin();
+        for(std::list<const Contact*>::const_iterator contIt = alpha.begin();
             contIt != alpha.end();
             contIt++)
         {

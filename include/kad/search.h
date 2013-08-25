@@ -31,14 +31,12 @@ class Search
         // Process the results
         void process_response(const uint128_t& target, uint32_t ip_address, uint16_t udp_port, std::list<Contact*>& results);
 
-        std::map<const uint128_t, SearchTask*> _tasks;
-
     private:
         Search() {};
         Search(const Search &);
         Search& operator = (const Search&);
 
-//        std::map<const uint128_t, SearchTask*> _tasks;
+        std::map<const uint128_t, SearchTask*> _tasks;
 };
 
 #endif

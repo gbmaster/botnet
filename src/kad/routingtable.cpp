@@ -115,3 +115,8 @@ void RoutingTable::maintain_table()
         _root->merge_leaves();
     }
 }
+
+void RoutingTable::process_big_timer()
+{
+    _root->process_big_timer();
+}

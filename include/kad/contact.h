@@ -31,7 +31,7 @@ inline KadContactType operator++(KadContactType &type, int)
 class Contact
 {
     public:
-        Contact(uint128_t contact_id,
+        Contact(const uint128_t& contact_id,
                 uint32_t ip_address,
                 uint16_t udp_port,
                 uint16_t tcp_port,

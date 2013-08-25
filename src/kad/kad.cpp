@@ -12,8 +12,6 @@
 
 Kad::Kad()
 {
-    srand(get_current_time());
-
     _kad_udp_key = 0x842A1683;
 
     WriteWarnLog("REMEMBER TO GENERATE A VALID CLIENT_ID");
@@ -48,7 +46,7 @@ void Kad::bootstrap()
     }
 }
 
-bool Kad::send_kad_packet(uint32_t ip_address, uint16_t port, const uint128_t& contact_id, const KadUDPKey udp_key, const unsigned char type, const unsigned char *payload, const uint32_t length)
+bool Kad::send_kad_packet(uint32_t ip_address, uint16_t port, const uint128_t& contact_id, const KadUDPKey udp_key, const unsigned char type, const unsigned char *payload, uint32_t length)
 {
     /*
      * Kad packets are like this:
@@ -107,7 +105,7 @@ bool Kad::send_bootstrap_request(const Contact *contact)
                            0);
 }
 
-bool Kad::process_bootstrap_response(const unsigned char *buffer, const uint32_t length)
+bool Kad::process_bootstrap_response(const unsigned char *buffer, uint32_t length, uint32_t ip_address)
 {
     /*
      * This packet MUST be at least 21 bytes long:
@@ -119,7 +117,11 @@ bool Kad::process_bootstrap_response(const unsigned char *buffer, const uint32_t
      */
 
     if(length < 21)
+    {
+        WriteErrLog("KADEMLIA2_BOOTSTRAP_RES from " << ip_to_str(ip_address) <<
+                    " received with wrong length (" << length << "B). Discarding...");
         return false;
+    }
 
     // If there are no contacts, all the contacts will be considered as verified
     bool verified = RoutingTable::get_instance().get_num_contacts() == 0;
@@ -224,7 +226,7 @@ bool Kad::send_hello_request(const Contact* contact, bool is_ack_requested)
     return ret;
 }
 
-bool Kad::process_hello_response(const unsigned char *buffer, const uint32_t length, uint32_t ip_address, uint16_t port, KadUDPKey& udp_key, bool is_recv_key_valid)
+bool Kad::process_hello_response(const unsigned char *buffer, uint32_t length, uint32_t ip_address, uint16_t port, KadUDPKey& udp_key, bool is_recv_key_valid)
 {
     /*
      * This packet MUST be at least 20 bytes long:
@@ -236,7 +238,11 @@ bool Kad::process_hello_response(const unsigned char *buffer, const uint32_t len
      */
 
     if(length < 20)
+    {
+        WriteErrLog("KADEMLIA2_HELLO_RES from " << ip_to_str(ip_address) <<
+                    " received with wrong length (" << length << "B). Discarding...");
         return false;
+    }
 
     uint128_t contact_id = uint128_t::get_from_buffer(buffer);
     uint16_t tcp_port = *(uint16_t *)&(buffer[16]);
@@ -308,15 +314,15 @@ bool Kad::process_hello_response(const unsigned char *buffer, const uint32_t len
     if(Firewall::get_instance().external_port_needed())
         send_ping(contact);
 
-    if(Firewall::get_instance().firewall_check_needed())
-        Firewall::get_instance().firewall_check(ip_address, udp_port, udp_key);
+    if(Firewall::get_instance().tcp_firewall_check_needed())
+        Firewall::get_instance().tcp_firewall_check(ip_address, udp_port, udp_key);
 
     delete contact;
 
     return true;
 }
 
-bool Kad::process_firewalled_response(const unsigned char *buffer, const uint32_t length, uint32_t ip_address, uint16_t udp_port)
+bool Kad::process_firewalled_response(const unsigned char *buffer, uint32_t length, uint32_t ip_address, uint16_t udp_port)
 {
     // The KADEMLIA_FIREWALLED_RES message brings us the information about the external IP
     // that we use. Not even the space for that? In this case, sorry, it's a misforged packet
@@ -360,7 +366,7 @@ bool Kad::send_ping(const Contact *contact)
                            0);
 }
 
-bool Kad::process_pong(const unsigned char *buffer, const uint32_t length, uint32_t ip_address, uint16_t udp_port)
+bool Kad::process_pong(const unsigned char *buffer, uint32_t length, uint32_t ip_address, uint16_t udp_port)
 {
     // The KADEMLIA2_PONG message brings us the information about the external port
     // that we use. Not even the space for that? In this case, sorry, it's
@@ -381,7 +387,112 @@ bool Kad::process_pong(const unsigned char *buffer, const uint32_t length, uint3
     if(Firewall::get_instance().external_port_needed())
     {
         Firewall::get_instance().add_new_external_port(ip_address, *(uint16_t *)buffer);
+        Firewall::get_instance().udp_firewall_check();
     }
+
+    return true;
+}
+
+bool Kad::send_request(const Contact* contact, uint8_t max_responses, const uint128_t& target)
+{
+    /*
+     * This packet MUST be at 33 bytes long:
+     *   1B contact count
+     *  16B target ID
+     *  16B contact ID
+     */
+    WriteLog("Sending KADEMLIA2_REQ to " << *contact);
+
+    unsigned char *packet = new unsigned char[33];
+
+    packet[0] = max_responses;
+
+    unsigned char target_id_buffer[16];
+    target.to_buffer(target_id_buffer);
+    memcpy(&(packet[1]), target_id_buffer, 16);
+
+    unsigned char contact_id_buffer[16];
+    contact->get_contact_id().to_buffer(contact_id_buffer);
+    memcpy(&(packet[17]), contact_id_buffer, 16);
+
+    bool ret = send_kad_packet(contact->get_ip_address(),
+                               contact->get_udp_port(),
+                               contact->get_contact_id(),
+                               contact->get_udp_key(),
+                               KADEMLIA2_REQ,
+                               packet,
+                               33);
+
+    delete [] packet;
+
+    return ret;
+}
+
+bool Kad::process_response(const unsigned char *buffer, uint32_t length, uint32_t ip_address, uint16_t udp_port)
+{
+    if(length < 17)
+    {
+        WriteErrLog("KADEMLIA2_RES from " << ip_to_str(ip_address) <<
+                    " received with wrong length (" << length << "B). Discarding...");
+        return false;
+    }
+
+    const uint128_t target = uint128_t::get_from_buffer(buffer);
+    uint8_t num_contacts = buffer[16];
+
+    if(length != 17 + (uint32_t)num_contacts * 25)
+    {
+        WriteErrLog("KADEMLIA2_RES from " << ip_to_str(ip_address) <<
+                    " received with wrong length (" << length << "B). Discarding...");
+        return false;
+    }
+
+    bool is_a_firewall_check = false;
+    if(Firewall::get_instance().udp_firewall_check_needed() && Search::get_instance().is_firewall_check(target))
+      is_a_firewall_check = true;
+
+    const unsigned char* contact_buffer;
+    if(num_contacts) contact_buffer = buffer + 17;
+
+    std::list<Contact *> results;
+
+    for(uint8_t i = 0; i < num_contacts; i++, contact_buffer += 25)
+    {
+        uint128_t contact_id = uint128_t::get_from_buffer(contact_buffer);
+        uint32_t contact_ip = ntohl(*(uint32_t *)&(contact_buffer[16]));
+        uint16_t contact_udp_port = *(uint16_t *)&(contact_buffer[20]);
+        uint16_t contact_tcp_port = *(uint16_t *)&(contact_buffer[22]);
+        uint8_t contact_version = contact_buffer[24];
+
+        if(is_a_firewall_check)
+        {
+            Firewall::get_instance().add_possible_udp_test_contact(contact_id,
+                                                                   contact_ip,
+                                                                   contact_udp_port,
+                                                                   contact_tcp_port,
+                                                                   contact_version,
+                                                                   0,
+                                                                   false);
+        }
+        else
+        {
+            // Add it to the routing table
+            Contact* contact = new Contact(contact_id,
+                                           contact_ip,
+                                           contact_udp_port,
+                                           contact_tcp_port,
+                                           contact_version,
+                                           0,
+                                           false);
+
+            if(RoutingTable::get_instance().add(contact))
+                results.push_back(contact);
+            else
+                delete contact;
+        }
+    }
+
+    Search::get_instance().process_response(target, ip_address, udp_port, results);
 
     return true;
 }
@@ -440,13 +551,19 @@ void Kad::retrieve_and_dispatch_potential_packet()
                 case KADEMLIA2_BOOTSTRAP_RES:
                 {
                     WriteLog("It's a KADEMLIA2_BOOTSTRAP_RES");
-                    process_bootstrap_response(decrypted_buffer + 2, decrypted_length - 2);
+                    process_bootstrap_response(decrypted_buffer + 2, decrypted_length - 2, saddr.sin_addr.s_addr);
                     break;
                 }
                 case KADEMLIA2_HELLO_RES:
                 {
                     WriteLog("It's a KADEMLIA2_HELLO_RES");
                     process_hello_response(decrypted_buffer + 2, decrypted_length - 2, saddr.sin_addr.s_addr, ntohs(saddr.sin_port), udp_key, valid_recv_key);
+                    break;
+                }
+                case KADEMLIA2_RES:
+                {
+                    WriteLog("It's a KADEMLIA2_RES");
+                    process_response(decrypted_buffer + 2, decrypted_length -2 , saddr.sin_addr.s_addr, ntohs(saddr.sin_port));
                     break;
                 }
                 case KADEMLIA_FIREWALLED_RES:
@@ -471,7 +588,7 @@ void Kad::retrieve_and_dispatch_potential_packet()
     }
 }
 
-void Kad::deobfuscate_packet(unsigned char* in_buffer, const uint32_t in_buffer_length, unsigned char** out_buffer, uint32_t* out_buffer_length, uint32_t ip_address, uint32_t* receiver_key, uint32_t* sender_key)
+void Kad::deobfuscate_packet(unsigned char* in_buffer, uint32_t in_buffer_length, unsigned char** out_buffer, uint32_t* out_buffer_length, uint32_t ip_address, uint32_t* receiver_key, uint32_t* sender_key)
 {
     *receiver_key = *sender_key = 0;
     *out_buffer = in_buffer;
@@ -563,7 +680,7 @@ void Kad::deobfuscate_packet(unsigned char* in_buffer, const uint32_t in_buffer_
     rc4_process(*out_buffer, *out_buffer, *out_buffer_length, &receiver_rc4_key);
 }
 
-void Kad::obfuscate_packet(unsigned char* in_buffer, const uint32_t in_buffer_length, unsigned char* out_buffer, uint32_t* out_buffer_length, unsigned char *client_id_data, uint32_t receiver_key, uint32_t sender_key)
+void Kad::obfuscate_packet(unsigned char* in_buffer, uint32_t in_buffer_length, unsigned char* out_buffer, uint32_t* out_buffer_length, unsigned char *client_id_data, uint32_t receiver_key, uint32_t sender_key)
 {
     /*
        The crypto header is composed like this:

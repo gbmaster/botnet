@@ -44,10 +44,10 @@ class SearchTask
         // Does this contact fall in the tolerance zone?
         bool in_tolerance_zone(const uint128_t& target, const uint128_t& source, uint32_t tolerance_zone);
 
-        const uint128_t& _id;
+        const uint128_t _id;
 
-        std::list<Contact *> _possible_contacts;
-        std::list<Contact *> _used_contacts;
+        std::list<const Contact *> _possible_contacts;
+        std::list<const Contact *> _used_contacts;
 
         SearchType _type;
 

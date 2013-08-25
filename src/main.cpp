@@ -13,6 +13,8 @@
 
 int main()
 {
+    srand(get_current_time());
+
 	/*
 	 * Network initialization (actually needed only Windows)
 	 */
@@ -29,7 +31,7 @@ int main()
     // Try to download the nodes from nodes.dat files from the www
     download_nodes_list(peer_list, bootstrap_list);
     // unsigned char id[16] = { 0xC0, 0x18, 0xE8, 0xFF, 0x42, 0x8F, 0x1A, 0xAA, 0x88, 0x45, 0x06, 0x0E, 0xAF, 0x88, 0x92, 0x52};
-    // Contact *tmp_contact = new Contact(uint128_t::get_from_buffer(id), 0xB501A8C0, 9734, 123, 9, 0, false);
+    // Contact *tmp_contact = new Contact(uint128_t::get_from_buffer(id), 0xB501A8C0, 9734, 123, 9, 0, true);
     // peer_list.push_back(tmp_contact);
 
     for(std::list<Contact *>::const_iterator contIt = peer_list.begin();
@@ -41,6 +43,7 @@ int main()
     WriteLog("Added " << peer_list.size() << " nodes and " << bootstrap_list.size() << " bootstrap nodes");
 
     time_t next_routingtable_check = 0;
+    time_t next_searches_push = 0;
 
     while(active)
     {
@@ -50,6 +53,16 @@ int main()
 
         Kad::get_instance().retrieve_and_dispatch_potential_packet();
         TCPServer::get_instance().retrieve_and_dispatch_potential_packet();
+
+        // Wake up all the pending searches
+        if(next_searches_push <= now)
+        {
+            Search::get_instance().wake_up_searches();
+            next_searches_push = now + 1;
+        }
+
+        // Check randomly for new contacts (big timer)
+        RoutingTable::get_instance().process_big_timer();
 
         // Should we bootstrap?
         if(!Kad::get_instance().is_connected() && RoutingTable::get_instance().get_num_contacts() == 0)

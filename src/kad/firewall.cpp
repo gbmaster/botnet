@@ -4,11 +4,12 @@
 
 Firewall::Firewall()
 {
-    _num_fw_checks = 0;
-    _is_verified = false;
+    _num_tcp_fw_checks = 0;
     _tcp_fw_responses = 0;
-    _is_udp_firewalled = true;
 
+    _is_udp_verified = false;
+    _is_udp_firewalled = true;
+    _udp_fw_responses = 0;
     _ext_udp_port = 0;
     _ext_udp_port_used = false;
     _ext_udp_verified = false;
@@ -56,7 +57,7 @@ bool Firewall::external_port_needed()
     return _externIPs.size() < 3;
 }
 
-bool Firewall::firewall_check(uint32_t ip_address, uint16_t udp_port, KadUDPKey& udp_key)
+bool Firewall::tcp_firewall_check(uint32_t ip_address, uint16_t udp_port, KadUDPKey& udp_key)
 {
     unsigned int packet_size = 19;
 
@@ -86,30 +87,6 @@ bool Firewall::firewall_check(uint32_t ip_address, uint16_t udp_port, KadUDPKey&
     return ret;
 }
 
-bool Firewall::send_firewall_check_udp_request(uint32_t ip_address, uint16_t port)
-{
-    if(!Kad::get_instance().is_connected())
-        return false;
-
-    uint16_t internal_port = Kad::get_instance().get_udp_port();
-    uint16_t external_port = get_external_udp_port();
-    uint32_t udp_key = Kad::get_instance().get_udp_verify_key(ip_address);
-
-    // OK, this is an ed2k packet. It will be forged differently
-    unsigned char packet[14];
-    uint32_t length = 14;
-
-    packet[0] = 0xC5; // eMule protocol
-    memcpy(packet + 1, &length, 4); // packet length
-    packet[5] = 0xA7; // firewall UDP check
-
-    memcpy(packet + 6, &internal_port, 2);
-    memcpy(packet + 8, &external_port, 2);
-    memcpy(packet + 10, &udp_key, 4);
-
-    return udp_send(Kad::get_instance().get_socket(), ip_to_str(ip_address), port, packet, length);
-}
-
 bool Firewall::is_firewall_req_ip_address(uint32_t ip_address) const
 {
     for(std::list<uint32_t>::const_iterator ipIt = _firewall_requests.begin();
@@ -135,4 +112,47 @@ void Firewall::remove_firewall_req_ip_address(uint32_t ip_address)
             return;
         }
     }
+}
+
+void Firewall::udp_firewall_check()
+{
+    if(!udp_firewall_check_needed() || external_port_needed())
+        return;
+
+    // Loop on the contacts in order to find the one to send the request to
+    while(!_potential_clients.empty())
+    {
+        Contact contact = _potential_clients.front();
+        _potential_clients.pop_front();
+
+        // Was this contact already used?
+        bool already_used = false;
+        for(std::map<uint32_t, bool>::const_iterator contIt = _used_clients.begin();
+            contIt != _used_clients.end();
+            contIt++)
+        {
+            if(contIt->first == contact.get_ip_address())
+            {
+                already_used = true;
+                break;
+            }
+        }
+
+        // Is this a brand new contact?
+        if(!already_used && RoutingTable::get_instance().is_ip_present(contact.get_ip_address()))
+        {
+            WriteWarnLog("SHOULD SEND AN UDP FIREWALL CHECK REQUEST");
+            _used_clients[contact.get_ip_address()] = false;
+            break;
+        }
+    }
+}
+
+void Firewall::add_possible_udp_test_contact(const uint128_t& contact_id, uint32_t ip_address, uint16_t udp_port, uint16_t tcp_port, unsigned char version, const KadUDPKey& udp_key, bool is_verified)
+{
+    // If the UDP firewall check is not needed anymore, then it's useless
+    if(!udp_firewall_check_needed())
+        return;
+
+    _potential_clients.push_front(Contact(contact_id, ip_address, udp_port, tcp_port, version, udp_key, is_verified));
 }

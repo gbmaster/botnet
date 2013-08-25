@@ -2,6 +2,14 @@
 #include "kad/uint128.h"
 #include "net/ip.h"
 
+bool compare_distance(const Contact* first, const Contact* second)
+{
+    if (first->get_distance() < second->get_distance())
+        return true;
+    else
+        return false;
+}
+
 Contact* KBucket::get_contact(const uint128_t& contact_id)
 {
     for(std::list<Contact *>::const_iterator contIt = _contact_list.begin();
@@ -88,6 +96,31 @@ Contact* KBucket::get_random_contact()
     }
 
     return contact;
+}
+
+void KBucket::get_nearest_contacts(KadContactType maxType, const uint128_t& target, const uint128_t& distance, uint32_t max_required, std::list<const Contact *>& results)
+{
+    if(_contact_list.size() == 0)
+        return;
+
+    for(std::list<Contact *>::const_iterator contIt = _contact_list.begin();
+        contIt != _contact_list.end();
+        contIt++)
+    {
+        // Is it the one we're looking for?
+        if((*contIt)->get_type() <= maxType && (*contIt)->is_verified())
+        {
+            results.push_back(*contIt);
+        }
+    }
+
+    // We need to sort' em, now, as we'll check if there are too many results
+    results.sort(compare_distance);
+
+    while(results.size() > max_required)
+    {
+        results.erase(--results.end());
+    }
 }
 
 void KBucket::get_contact_list(std::list<Contact *>& contact_list)

@@ -1,7 +1,7 @@
 #include "kad/contact.h"
 #include "kad/kad.h"
 
-Contact::Contact(uint128_t contact_id, uint32_t ip_address, uint16_t udp_port, uint16_t tcp_port,
+Contact::Contact(const uint128_t& contact_id, uint32_t ip_address, uint16_t udp_port, uint16_t tcp_port,
                  uint8_t version, const KadUDPKey& udp_key, bool is_verified)
 {
     _contact_id = contact_id;

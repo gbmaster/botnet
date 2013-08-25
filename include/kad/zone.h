@@ -24,7 +24,10 @@ class Zone
         }
 
         bool add(Contact *contact);
+
         const Contact *get_random_contact();
+        void get_nearest_contacts(KadContactType maxType, const uint128_t& target, const uint128_t& distance, uint32_t max_required, std::list<const Contact *>& results);
+
         Contact *get_contact(const uint128_t& contact_id);
         Contact *get_contact_by_ip(uint32_t ip_address, uint16_t port, bool is_tcp = false)
         {
@@ -36,6 +39,7 @@ class Zone
             if(contact != NULL)
                 contact->update_type();
         }
+
         bool is_ip_present(uint32_t ip_address);
 
         void merge_leaves();
@@ -50,6 +54,8 @@ class Zone
         Zone *get_left_child() const { return _left_child; }
         Zone *get_right_child() const { return _right_child; }
 
+        void process_big_timer();
+
     private:
         uint128_t _index;
         unsigned int _level;
@@ -58,6 +64,8 @@ class Zone
         Zone *_left_child;
         Zone *_right_child;
         KBucket *_subnet;
+
+        time_t _next_big_timer;
 
         Contact *get_contact_by_ip_ref(uint32_t ip_address, uint16_t port, bool is_tcp = false);
 };
