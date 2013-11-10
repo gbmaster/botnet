@@ -18,7 +18,7 @@ void Search::wake_up_searches()
         if(task->get_creation_time() + task->get_timeout() <= now)
         {
             // Timeout-ed: please terminate this
-            WriteLog("The search for ID #" << target << " timeout-ed. Deleting it...");
+            WriteLog("The search for ID #" << target << " died. Deleting it...");
             _tasks.erase(itCurrentTask);
             delete task;
         }
@@ -66,7 +66,7 @@ void Search::stop_search(const uint128_t& id)
 
 bool Search::find_node(const uint128_t& target)
 {
-    WriteLog("FIND_NODE for " << target);
+    WriteLog("FIND_NODE for #" << target);
 
     // Is there already a search going on on this?
     if(already_searching_for(target))
@@ -77,7 +77,7 @@ bool Search::find_node(const uint128_t& target)
 
     // Start a new one
     SearchTask* search_task = new SearchTask(target, FIND_NODE);
-    _tasks[target] = search_task;
+    add_new_task(target, search_task);
 
     search_task->start();
     return true;

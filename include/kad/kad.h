@@ -141,6 +141,14 @@ class Kad
                                          uint16_t udp_port);
 
         /*
+         * Processes a KADEMLIA2_PING message
+         */
+        bool process_ping(const unsigned char *buffer,
+                          uint32_t length,
+                          uint32_t ip_address,
+                          uint16_t udp_port,
+                          KadUDPKey& udp_key);
+        /*
          * Sends a KADEMLIA2_PING to contact
          */
         bool send_ping(const Contact *contact);

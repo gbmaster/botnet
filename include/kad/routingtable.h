@@ -44,6 +44,7 @@ class RoutingTable
 
         unsigned int get_num_contacts() { return _root->get_num_contacts(); }
 
+        void get_all_zones(std::list<Zone *>& zones_list, Zone *starting_zone = NULL);
         void get_all_kBuckets(std::list<KBucket *>& kBuckets_list, Zone *starting_zone = NULL);
 
         void maintain_table();

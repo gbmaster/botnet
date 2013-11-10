@@ -58,7 +58,7 @@ bool Zone::add(Contact *contact)
                 WriteWarnLog(ip_to_str(contact->get_ip_address()) <<
                              " tried to update itself in the routing table, but the Kad UDP key provided (0x" <<
                              std::hex << contact->get_udp_key().get_key(Kad::get_instance().get_public_ip()) <<
-                             ") is different from the old one (" <<
+                             ") is different from the old one (0x" <<
                              old_contact->get_udp_key().get_key(Kad::get_instance().get_public_ip()) <<
                              std::dec << ")");
                 return false;
@@ -288,40 +288,39 @@ bool Zone::is_ip_present(uint32_t ip_address)
     return ret;
 }
 
-void Zone::process_big_timer()
+bool Zone::process_big_timer()
 {
-    if(is_leaf())
+    if(is_leaf() && (_index < 5 || _level < 4 || _subnet->get_num_contacts() < K * 0.8))
     {
-        if(_index < 5 || _level < 4 || _subnet->get_num_contacts() < K * 0.8)
+        time_t now = get_current_time();
+        // Do we need a new random lookup ?
+        if(_next_big_timer <= now)
         {
-            time_t now = get_current_time();
-            // Do we need a new random lookup ?
-            if(_next_big_timer <= now)
+            WriteLog(LOG_SECTION("Processing the big timer for zone #" << _index << " and level " << _level));
+
+            // Create a random contact ID
+            uint128_t fake_target(_index);
+            fake_target <<= (128 - _level);
+            for(unsigned int i = 0; i < _level; i++)
             {
-                // Create a random contact ID
-                uint128_t fake_target(_index);
-                fake_target <<= (128 - _level);
-                fake_target <<= _level;
-                for(unsigned int i = 0; i < _level; i++)
-                {
-                    char bit = rand() % 2;
-                    if(bit)
-                        fake_target |= (1 << i);
-                    else
-                        fake_target &= ~(1 << i);
-                }
-                fake_target ^= Kad::get_instance().get_client_id();
-
-                Search::get_instance().find_node(fake_target);
-
-                // Next scan in 1 hour
-                _next_big_timer = now + 3600;
+                char bit = rand() % 2;
+                if(bit)
+                    fake_target |= (1 << i);
+                else
+                    fake_target &= ~(1 << i);
             }
+            fake_target ^= Kad::get_instance().get_client_id();
+
+            Search::get_instance().find_node(fake_target);
+
+            // Next scan in 1 hour
+            _next_big_timer = now + 3600;
+
+            WriteLog(LOG_SECTION("Big timer is over"));
+
+            return true;
         }
     }
-    else
-    {
-        _left_child->process_big_timer();
-        _right_child->process_big_timer();
-    }
+
+    return false;
 }

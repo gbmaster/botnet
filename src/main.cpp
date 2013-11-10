@@ -15,9 +15,9 @@ int main()
 {
     srand(get_current_time());
 
-	/*
-	 * Network initialization (actually needed only Windows)
-	 */
+    /*
+     * Network initialization (actually needed only Windows)
+     */
     if(!net_initialize())
     {
 	WriteLog("Unable to initialize the network");
@@ -42,8 +42,9 @@ int main()
     }
     WriteLog("Added " << peer_list.size() << " nodes and " << bootstrap_list.size() << " bootstrap nodes");
 
-    time_t next_routingtable_check = 0;
-    time_t next_searches_push = 0;
+    time_t next_routingtable_check = 0, next_searches_push = 0, next_big_timer = 0;
+    // time_t next_firewall_check = get_current_time() + 3600;
+    time_t next_firewall_check = get_current_time() + 60;
 
     while(active)
     {
@@ -54,15 +55,32 @@ int main()
         Kad::get_instance().retrieve_and_dispatch_potential_packet();
         TCPServer::get_instance().retrieve_and_dispatch_potential_packet();
 
+        // Should I check again the UDP firewall?
+        if(next_firewall_check <= now)
+        {
+            Firewall::get_instance().repeat_udp_firewall_check();
+            next_firewall_check = now + 3600;
+        }
+
         // Wake up all the pending searches
         if(next_searches_push <= now)
         {
             Search::get_instance().wake_up_searches();
-            next_searches_push = now + 1;
+            next_searches_push = now + 5;
         }
 
         // Check randomly for new contacts (big timer)
-        RoutingTable::get_instance().process_big_timer();
+        std::list<Zone *> zones_list;
+        RoutingTable::get_instance().get_all_zones(zones_list);
+
+        // Ask for new contacts
+        for(std::list<Zone *>::iterator zoneIt = zones_list.begin();
+            zoneIt != zones_list.end();
+            zoneIt++)
+        {
+            if(next_big_timer <= now && (*zoneIt)->process_big_timer())
+                next_big_timer = now + 10;      // Next check in 10 secs
+        }
 
         // Should we bootstrap?
         if(!Kad::get_instance().is_connected() && RoutingTable::get_instance().get_num_contacts() == 0)
@@ -77,7 +95,7 @@ int main()
             RoutingTable::get_instance().maintain_table();
             next_routingtable_check = now + 60;
         }
-	}
+    }
 
     return 0;
 }

@@ -51,9 +51,15 @@ class Firewall
         bool udp_firewall_check_needed() { return _udp_fw_responses < MAXIMUM_KAD_UDP_FW_RESPONSES; }
 
         /*
-         * Sends an UDP firewall check request to the next candidate
+         * Starts an UDP firewall check
          */
         void udp_firewall_check();
+        void repeat_udp_firewall_check();
+        /*
+         * Sends an UDP firewall check request to the next candidate
+         */
+        void udp_firewall_query_again();
+
 
         bool is_udp_firewalled() { return _is_udp_firewalled; }
 
@@ -94,6 +100,8 @@ class Firewall
         Firewall(const Firewall &);
         Firewall& operator = (const Firewall&);
 
+        void forge_and_send_udp_firewall_req(const Contact* contact);
+
         std::list<uint32_t> _firewall_requests;
 
         unsigned int _num_tcp_fw_checks;
@@ -105,6 +113,8 @@ class Firewall
         uint16_t _ext_udp_port;
         bool _ext_udp_port_used;
         bool _ext_udp_verified;
+
+        bool _is_udp_started;           // Set to true if there is a search going on
 
         std::vector<uint32_t> _externIPs;       // The IPs we received the responses from
         std::vector<uint16_t> _externPorts;     // The port they told us we have

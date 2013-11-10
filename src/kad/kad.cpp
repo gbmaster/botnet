@@ -94,7 +94,7 @@ bool Kad::send_kad_packet(uint32_t ip_address, uint16_t port, const uint128_t& c
 
 bool Kad::send_bootstrap_request(const Contact *contact)
 {
-    WriteLog("Sending KADEMLIA2_BOOTSTRAP_REQ to " << *contact);
+    WriteLog("Sending " << LOG_MESSAGE_NAME("KADEMLIA2_BOOTSTRAP_REQ") << " to " << *contact);
 
     return send_kad_packet(contact->get_ip_address(),
                            contact->get_udp_port(),
@@ -212,7 +212,7 @@ bool Kad::send_hello_request(const Contact* contact, bool is_ack_requested)
         delete kad_options_tag;
     }
 
-    WriteLog("Sending KADEMLIA2_HELLO_REQ to " << *contact);
+    WriteLog("Sending " << LOG_MESSAGE_NAME("KADEMLIA2_HELLO_REQ") << " to " << *contact);
     bool ret = send_kad_packet(contact->get_ip_address(),
                                contact->get_udp_port(),
                                contact->get_contact_id(),
@@ -353,9 +353,29 @@ bool Kad::process_firewalled_response(const unsigned char *buffer, uint32_t leng
     return true;
 }
 
+bool Kad::process_ping(const unsigned char *buffer, uint32_t length, uint32_t ip_address, uint16_t udp_port, KadUDPKey& udp_key)
+{
+    unsigned char *packet = new unsigned char[2];
+
+    memcpy(packet, &udp_port, 2);
+
+    // Reply with a pong
+    bool ret = send_kad_packet(ip_address,
+                               udp_port,
+                               0,
+                               udp_key,
+                               KADEMLIA2_PONG,
+                               packet,
+                               2);
+
+    delete [] packet;
+
+    return ret;
+}
+
 bool Kad::send_ping(const Contact *contact)
 {
-    WriteLog("Sending KADEMLIA2_PING to " << ip_to_str(contact->get_ip_address()) << ":" << contact->get_udp_port());
+    WriteLog("Sending " << LOG_MESSAGE_NAME("KADEMLIA2_PING") << " to " << ip_to_str(contact->get_ip_address()) << ":" << contact->get_udp_port());
 
     return send_kad_packet(contact->get_ip_address(),
                            contact->get_udp_port(),
@@ -387,7 +407,9 @@ bool Kad::process_pong(const unsigned char *buffer, uint32_t length, uint32_t ip
     if(Firewall::get_instance().external_port_needed())
     {
         Firewall::get_instance().add_new_external_port(ip_address, *(uint16_t *)buffer);
-        Firewall::get_instance().udp_firewall_check();
+
+        if(Firewall::get_instance().udp_firewall_check_needed())
+            Firewall::get_instance().udp_firewall_query_again();
     }
 
     return true;
@@ -401,7 +423,7 @@ bool Kad::send_request(const Contact* contact, uint8_t max_responses, const uint
      *  16B target ID
      *  16B contact ID
      */
-    WriteLog("Sending KADEMLIA2_REQ to " << *contact);
+    WriteLog("Sending " << LOG_MESSAGE_NAME("KADEMLIA2_REQ") << LOG_RESETCOLOR << " to " << *contact);
 
     unsigned char *packet = new unsigned char[33];
 
@@ -449,7 +471,7 @@ bool Kad::process_response(const unsigned char *buffer, uint32_t length, uint32_
 
     bool is_a_firewall_check = false;
     if(Firewall::get_instance().udp_firewall_check_needed() && Search::get_instance().is_firewall_check(target))
-      is_a_firewall_check = true;
+        is_a_firewall_check = true;
 
     const unsigned char* contact_buffer;
     if(num_contacts) contact_buffer = buffer + 17;
@@ -505,7 +527,7 @@ void Kad::retrieve_and_dispatch_potential_packet()
 
     if(udp_recv(_sock, buffer, length, saddr) != SOCKET_ERROR)
     {
-        WriteLog("Received an UDP packet of " << length << "B from " << ip_to_str(saddr.sin_addr.s_addr));
+        WriteLog(LOG_SECTION("Received an UDP packet of " << length << "B from " << ip_to_str(saddr.sin_addr.s_addr)));
 
         if(length > 0)
         {
@@ -543,38 +565,51 @@ void Kad::retrieve_and_dispatch_potential_packet()
 
             // Set the last packet receiving time
             set_last_contact();
-
             RoutingTable::get_instance().update_type_for_ip(saddr.sin_addr.s_addr, ntohs(saddr.sin_port));
+
+            // If necessary, start a lookup for a random node to find suitable IPs
+            Firewall::get_instance().udp_firewall_check();
 
             switch (type)
             {
                 case KADEMLIA2_BOOTSTRAP_RES:
                 {
-                    WriteLog("It's a KADEMLIA2_BOOTSTRAP_RES");
+                    WriteLog("It's a " << LOG_MESSAGE_NAME2("KADEMLIA2_BOOTSTRAP_RES"));
                     process_bootstrap_response(decrypted_buffer + 2, decrypted_length - 2, saddr.sin_addr.s_addr);
                     break;
                 }
                 case KADEMLIA2_HELLO_RES:
                 {
-                    WriteLog("It's a KADEMLIA2_HELLO_RES");
+                    WriteLog("It's a " << LOG_MESSAGE_NAME2("KADEMLIA2_HELLO_RES"));
                     process_hello_response(decrypted_buffer + 2, decrypted_length - 2, saddr.sin_addr.s_addr, ntohs(saddr.sin_port), udp_key, valid_recv_key);
                     break;
                 }
                 case KADEMLIA2_RES:
                 {
-                    WriteLog("It's a KADEMLIA2_RES");
+                    WriteLog("It's a " << LOG_MESSAGE_NAME2("KADEMLIA2_RES"));
                     process_response(decrypted_buffer + 2, decrypted_length -2 , saddr.sin_addr.s_addr, ntohs(saddr.sin_port));
+                    break;
+                }
+                case KADEMLIA_FIREWALLED2_REQ:
+                {
+                    WriteWarnLog("It's a " << LOG_MESSAGE_NAME2("KADEMLIA_FIREWALLED2_REQ") << ". Ignoring...");
                     break;
                 }
                 case KADEMLIA_FIREWALLED_RES:
                 {
-                    WriteLog("It's a KADEMLIA_FIREWALLED_RES");
+                    WriteLog("It's a " << LOG_MESSAGE_NAME2("KADEMLIA_FIREWALLED_RES"));
                     process_firewalled_response(decrypted_buffer + 2, decrypted_length - 2, saddr.sin_addr.s_addr, ntohs(saddr.sin_port));
+                    break;
+                }
+                case KADEMLIA2_PING:
+                {
+                    WriteLog("It's a " << LOG_MESSAGE_NAME2("KADEMLIA2_PING"));
+                    process_ping(decrypted_buffer + 2, decrypted_length - 2, saddr.sin_addr.s_addr, ntohs(saddr.sin_port), udp_key);
                     break;
                 }
                 case KADEMLIA2_PONG:
                 {
-                    WriteLog("It's a KADEMLIA2_PONG");
+                    WriteLog("It's a " << LOG_MESSAGE_NAME2("KADEMLIA2_PONG"));
                     process_pong(decrypted_buffer + 2, decrypted_length - 2, saddr.sin_addr.s_addr, ntohs(saddr.sin_port));
                     break;
                 }
@@ -582,6 +617,8 @@ void Kad::retrieve_and_dispatch_potential_packet()
                     WriteErrLog("Kad packet with opcode 0x" << std::hex << (uint16_t)decrypted_buffer[1] << std::dec);
                     assert(false);
             }
+
+            WriteLog(LOG_SECTION("End of message processing"));
         }
 
         delete [] buffer;
@@ -597,14 +634,15 @@ void Kad::deobfuscate_packet(unsigned char* in_buffer, uint32_t in_buffer_length
     // Not even the space for the crypt header? Is it an encrypted packet?
     if(in_buffer_length < CRYPT_HEADER_WITHOUTPADDING || in_buffer[0] == KADEMLIA_PACKET)
     {
-        WriteLog("Not encrypted packet.");
-        assert(false);
+        WriteErrLog("Not encrypted packet.");
+        *out_buffer = NULL;
+        *out_buffer_length = 0;
         return;
     }
 
     // A clue about if it has been encrypted with the client ID or with the Kad UDP key
-	unsigned char marker_bit = (in_buffer[0] & 0x03);
-	if(marker_bit != 0 && marker_bit != 2) marker_bit = 0;
+    unsigned char marker_bit = (in_buffer[0] & 0x03);
+    if(marker_bit != 0 && marker_bit != 2) marker_bit = 0;
 
     bool last_check = false;
     unsigned char md5hash[16];

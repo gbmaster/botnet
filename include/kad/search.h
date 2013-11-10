@@ -20,6 +20,9 @@ class Search
         // Is there already a search for this ID?
         bool already_searching_for(const uint128_t& id);
 
+        // Add a new task to the set
+        void add_new_task(const uint128_t& target, SearchTask *task) { _tasks[target] = task; }
+
         // Is the search for ID a firewall check?
         bool is_firewall_check(const uint128_t& id);
 

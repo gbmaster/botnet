@@ -13,6 +13,8 @@ Firewall::Firewall()
     _ext_udp_port = 0;
     _ext_udp_port_used = false;
     _ext_udp_verified = false;
+
+    _is_udp_started = false;
 }
 
 void Firewall::add_new_external_port(uint32_t ip_address, uint16_t port)
@@ -75,7 +77,7 @@ bool Firewall::tcp_firewall_check(uint32_t ip_address, uint16_t udp_port, KadUDP
 
     uint128_t null_id(0);
 
-    WriteLog("Sending KADEMLIA_FIREWALLED2_REQ to " << ip_to_str(ip_address) << ":" << udp_port);
+    WriteLog("Sending " << LOG_MESSAGE_NAME("KADEMLIA_FIREWALLED2_REQ") << " to " << ip_to_str(ip_address) << ":" << udp_port);
     bool ret = Kad::get_instance().send_kad_packet(ip_address, udp_port, null_id, udp_key, KADEMLIA_FIREWALLED2_REQ, packet, packet_size);
 
     // We need to add the IP address to check that we don't receive any
@@ -114,7 +116,7 @@ void Firewall::remove_firewall_req_ip_address(uint32_t ip_address)
     }
 }
 
-void Firewall::udp_firewall_check()
+void Firewall::udp_firewall_query_again()
 {
     if(!udp_firewall_check_needed() || external_port_needed())
         return;
@@ -138,10 +140,10 @@ void Firewall::udp_firewall_check()
             }
         }
 
-        // Is this a brand new contact?
-        if(!already_used && RoutingTable::get_instance().is_ip_present(contact.get_ip_address()))
+        // Is this a brand new contact? We need that!
+        if(!already_used && !RoutingTable::get_instance().is_ip_present(contact.get_ip_address()))
         {
-            WriteWarnLog("SHOULD SEND AN UDP FIREWALL CHECK REQUEST");
+            forge_and_send_udp_firewall_req(&contact);
             _used_clients[contact.get_ip_address()] = false;
             break;
         }
@@ -155,4 +157,57 @@ void Firewall::add_possible_udp_test_contact(const uint128_t& contact_id, uint32
         return;
 
     _potential_clients.push_front(Contact(contact_id, ip_address, udp_port, tcp_port, version, udp_key, is_verified));
+}
+
+void Firewall::udp_firewall_check()
+{
+    if(!_is_udp_started && udp_firewall_check_needed())
+    {
+        const uint128_t target = uint128_t::get_random_128();
+
+        WriteLog("NODEFWCHECKUDP for #" << target);
+
+        SearchTask* search_task = new SearchTask(target, NODEFWCHECKUDP);
+        Search::get_instance().add_new_task(target, search_task);
+
+        search_task->start();
+
+        _is_udp_started = true;
+    }
+}
+
+void Firewall::repeat_udp_firewall_check()
+{
+    _udp_fw_responses = 0;
+
+    const uint128_t target = uint128_t::get_random_128();
+
+    WriteLog("NODEFWCHECKUDP for #" << target);
+
+    SearchTask* search_task = new SearchTask(target, NODEFWCHECKUDP);
+    Search::get_instance().add_new_task(target, search_task);
+
+    search_task->start();
+}
+
+void Firewall::forge_and_send_udp_firewall_req(const Contact* contact)
+{
+    unsigned char packet[14];
+
+    packet[0] = 0xC5;         // eMule protocol
+
+    uint32_t packet_size = 8; // packet length
+    memcpy(packet + 1, &packet_size, 4);
+
+    packet[5] = 0xA7;         // OP_FWCHECKUDPREQ
+
+    uint16_t internal_kad_port = Kad::get_instance().get_udp_port();
+    uint16_t external_kad_port = Firewall::get_instance().get_external_udp_port();
+    uint32_t udp_key = Kad::get_instance().get_udp_verify_key(contact->get_ip_address());
+
+    memcpy(packet + 6, &internal_kad_port, 2);
+    memcpy(packet + 8, &external_kad_port, 2);
+    memcpy(packet + 10, &udp_key, 4);
+
+    WriteWarnLog("An UDP firewall request should be sent here.");
 }

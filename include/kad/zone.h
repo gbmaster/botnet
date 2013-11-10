@@ -54,7 +54,7 @@ class Zone
         Zone *get_left_child() const { return _left_child; }
         Zone *get_right_child() const { return _right_child; }
 
-        void process_big_timer();
+        bool process_big_timer();
 
     private:
         uint128_t _index;

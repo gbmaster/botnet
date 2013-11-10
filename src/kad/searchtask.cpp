@@ -9,6 +9,8 @@ SearchTask::SearchTask(const uint128_t& id, SearchType type) : _id(id)
 
 void SearchTask::start()
 {
+    WriteLog(LOG_SECTION("Start search task ID #" << _id));
+
     if (_possible_contacts.empty())
     {
         const uint128_t distance = _id ^ Kad::get_instance().get_client_id();
@@ -21,10 +23,10 @@ void SearchTask::start()
         std::list<const Contact *>::iterator contIt = _possible_contacts.begin();
         for (uint32_t i = 0; i < get_req_count(); i++)
         {
-            const Contact *contact = *contIt;
+            const Contact *contact = *contIt++;
 
             // Move the contact to the used ones
-            _possible_contacts.erase(contIt);
+            _possible_contacts.pop_front();
             _used_contacts.push_back(contact);
 
             Kad::get_instance().send_request(contact, get_res_count(), _id);
@@ -34,20 +36,31 @@ void SearchTask::start()
     {
         WriteLog("We have no contacts to send the request to");
     }
+
+    WriteLog(LOG_SECTION("Start search task is over"));
 }
 
 void SearchTask::push_search()
 {
-    if(_possible_contacts.empty())
-        // Nothing to push
-        return;
+    WriteLog(LOG_SECTION("Pushing search task ID #" << _id));
 
-    const Contact* contact = *(_possible_contacts.begin());
+    if(!_possible_contacts.empty())
+    {
+        const Contact* contact = *(_possible_contacts.begin());
 
-    _possible_contacts.erase(_possible_contacts.begin());
-    _used_contacts.push_back(contact);
+        _possible_contacts.erase(_possible_contacts.begin());
+        _used_contacts.push_back(contact);
 
-    Kad::get_instance().send_request(contact, get_res_count(), _id);
+        Kad::get_instance().send_request(contact, get_res_count(), _id);
+    }
+    else
+    {
+        // By changing the creation time, we'll cheat in order to get deleted
+        WriteLog("We have no contacts to send the request to");
+        _creation_time = get_current_time() - get_timeout();
+    }
+
+    WriteLog(LOG_SECTION("End pushing search task ID #" << _id));
 }
 
 uint32_t SearchTask::get_req_count() const
@@ -61,7 +74,7 @@ uint32_t SearchTask::get_req_count() const
 
 uint32_t SearchTask::get_res_count() const
 {
-    if (_type == FIND_NODE)
+    if (_type == FIND_NODE || _type == NODEFWCHECKUDP)
         return KADEMLIA_FIND_NODE;
     else
         assert(false);
@@ -69,7 +82,7 @@ uint32_t SearchTask::get_res_count() const
 
 uint16_t SearchTask::get_timeout() const
 {
-    if (_type == FIND_NODE)
+    if (_type == FIND_NODE || _type == NODEFWCHECKUDP)
         return SEARCHNODE_LIFETIME;
     else
         assert(false);
@@ -85,6 +98,8 @@ bool SearchTask::in_tolerance_zone(const uint128_t& target, const uint128_t& sou
 
 void SearchTask::process_response(uint32_t ip_address, uint16_t udp_port, std::list<Contact*>& results)
 {
+    WriteLog(LOG_SECTION("Start processing search ID #" << _id));
+
     std::list<const Contact*> alpha;
 
     for(std::list<Contact*>::const_iterator contIt = results.begin();
@@ -101,6 +116,10 @@ void SearchTask::process_response(uint32_t ip_address, uint16_t udp_port, std::l
             if((*usedContIt)->get_contact_id() == contact->get_contact_id())
                 should_be_skipped = true;
         }
+
+        // If this one should be skipped, then skip it
+        if(should_be_skipped)
+            continue;
 
         for(std::list<const Contact*>::const_iterator possContIt = _possible_contacts.begin();
             possContIt != _possible_contacts.end();
@@ -122,6 +141,7 @@ void SearchTask::process_response(uint32_t ip_address, uint16_t udp_port, std::l
         }
         else
         {
+            WriteLog("Adding " << *contact << " to the contactable ones list");
             _possible_contacts.push_back(contact);
         }
     }
@@ -137,4 +157,6 @@ void SearchTask::process_response(uint32_t ip_address, uint16_t udp_port, std::l
             Kad::get_instance().send_request(*contIt, get_res_count(), _id);
         }
     }
+
+    WriteLog(LOG_SECTION("End processing search ID #" << _id));
 }

@@ -35,6 +35,20 @@ const Contact* RoutingTable::get_random_contact()
     return _root->get_random_contact();
 }
 
+void RoutingTable::get_all_zones(std::list<Zone *>& zones_list, Zone *starting_zone)
+{
+    if(starting_zone == NULL)
+        starting_zone = _root;
+
+    zones_list.push_back(starting_zone);
+
+    if(!starting_zone->is_leaf())
+    {
+        get_all_zones(zones_list, starting_zone->get_left_child());
+        get_all_zones(zones_list, starting_zone->get_right_child());
+    }
+}
+
 void RoutingTable::get_all_kBuckets(std::list<KBucket *>& kBuckets_list, Zone *starting_zone)
 {
     if(starting_zone == NULL)
@@ -53,6 +67,8 @@ void RoutingTable::get_all_kBuckets(std::list<KBucket *>& kBuckets_list, Zone *s
 
 void RoutingTable::maintain_table()
 {
+    WriteLog(LOG_SECTION("Routing table maintenance"));
+
     time_t now = get_current_time();
 
     std::list<KBucket *> kBuckets_list;
@@ -79,7 +95,7 @@ void RoutingTable::maintain_table()
             if((contact->get_type() == PROMPTED_FOR_DELETION) &&
                ((contact->get_expiration() > 0) && (contact->get_expiration() <= now)))
             {
-                WriteLog(*contact << " expired. Removing! " << get_num_contacts() << " contacts in the RT.");
+                WriteLog(*contact << " expired. Removing!");
                 // It was: delete it
                 kBucket->remove(contact);
 
@@ -114,9 +130,6 @@ void RoutingTable::maintain_table()
         _last_leaves_merge = now;
         _root->merge_leaves();
     }
-}
 
-void RoutingTable::process_big_timer()
-{
-    _root->process_big_timer();
+    WriteLog(LOG_SECTION("Routing table maintenance is over: " << LOG_CYAN << RoutingTable::get_instance().get_num_contacts() << LOG_RESETCOLOR << " contacts in the RT."));
 }
