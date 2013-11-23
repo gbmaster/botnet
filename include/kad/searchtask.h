@@ -14,8 +14,7 @@
 
 enum SearchType
 {
-	FIND_NODE,
-	NODEFWCHECKUDP
+	FIND_NODE
 };
 
 class SearchTask

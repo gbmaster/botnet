@@ -23,6 +23,7 @@
 #define KADEMLIA2_HELLO_REQ      0x11
 #define KADEMLIA2_HELLO_RES      0x19
 #define KADEMLIA2_REQ            0x21
+#define KADEMLIA2_HELLO_RES_ACK  0x22
 #define KADEMLIA2_RES            0x29
 #define KADEMLIA_FIREWALLED2_REQ 0x53
 #define KADEMLIA_FIREWALLED_RES  0x58
@@ -70,13 +71,8 @@ class Kad
 
         unsigned char get_connect_options(bool encryption, bool callback)
         {
-            unsigned char options;
-
-            options = callback ? (Firewall::get_instance().is_udp_firewalled() & Firewall::get_instance().is_udp_verified()) << 4 : 0;
             // Encryption is always supported
-            options |= encryption ? (1 << 3) | (1 << 2) | (1 << 1) : 0;
-
-            return options;
+            return encryption ? (1 << 3) | (1 << 2) | (1 << 1) : 0;
         }
 
         /*

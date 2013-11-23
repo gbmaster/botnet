@@ -35,20 +35,6 @@ bool Search::already_searching_for(const uint128_t& id)
     return _tasks.find(id) != _tasks.end();
 }
 
-bool Search::is_firewall_check(const uint128_t& id)
-{
-    std::map<const uint128_t, SearchTask*>::const_iterator taskIt = _tasks.find(id);
-    if(taskIt != _tasks.end())
-    {
-        SearchTask* task = taskIt->second;
-
-        if(task->get_type() == NODEFWCHECKUDP)
-            return true;
-    }
-
-    return false;
-}
-
 void Search::stop_search(const uint128_t& id)
 {
     std::map<const uint128_t, SearchTask*>::iterator itTask = _tasks.find(id);

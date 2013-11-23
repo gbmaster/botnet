@@ -74,7 +74,7 @@ uint32_t SearchTask::get_req_count() const
 
 uint32_t SearchTask::get_res_count() const
 {
-    if (_type == FIND_NODE || _type == NODEFWCHECKUDP)
+    if (_type == FIND_NODE)
         return KADEMLIA_FIND_NODE;
     else
         assert(false);
@@ -82,7 +82,7 @@ uint32_t SearchTask::get_res_count() const
 
 uint16_t SearchTask::get_timeout() const
 {
-    if (_type == FIND_NODE || _type == NODEFWCHECKUDP)
+    if (_type == FIND_NODE)
         return SEARCHNODE_LIFETIME;
     else
         assert(false);
@@ -100,6 +100,32 @@ void SearchTask::process_response(uint32_t ip_address, uint16_t udp_port, std::l
 {
     WriteLog(LOG_SECTION("Start processing search ID #" << _id));
 
+    uint128_t distance;
+    const Contact *from_contact = NULL;
+
+    for(std::list<const Contact*>::const_iterator contIt = _used_contacts.begin();
+        contIt != _used_contacts.end();
+        contIt++)
+    {
+        const Contact *contact = *contIt;
+        if(contact->get_ip_address() == ip_address && contact->get_udp_port() == udp_port)
+        {
+            distance = contact->get_distance();
+            from_contact = contact;
+            break;
+        }
+    }
+
+    // As the results have been already inserted by the Kad process, we're not interested in results (here)
+    if(_type == FIND_NODE)
+    {
+        _possible_contacts.clear();
+        return;
+    }
+
+    if(from_contact == NULL || from_contact != NULL)
+        assert(false);
+/*
     std::list<const Contact*> alpha;
 
     for(std::list<Contact*>::const_iterator contIt = results.begin();
@@ -157,6 +183,6 @@ void SearchTask::process_response(uint32_t ip_address, uint16_t udp_port, std::l
             Kad::get_instance().send_request(*contIt, get_res_count(), _id);
         }
     }
-
+*/
     WriteLog(LOG_SECTION("End processing search ID #" << _id));
 }

@@ -23,9 +23,6 @@ class Search
         // Add a new task to the set
         void add_new_task(const uint128_t& target, SearchTask *task) { _tasks[target] = task; }
 
-        // Is the search for ID a firewall check?
-        bool is_firewall_check(const uint128_t& id);
-
         void stop_search(const uint128_t& id);
 
         // Start a new search for the node target

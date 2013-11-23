@@ -174,13 +174,11 @@ bool Kad::send_hello_request(const Contact* contact, bool is_ack_requested)
         packet_size += source_udp_port_tag->get_size();
     }
 
-    if(contact->get_version() >= 8 &&
-       (Firewall::get_instance().is_udp_firewalled() || Firewall::get_instance().is_tcp_firewalled()))
+    if(contact->get_version() >= 8 && Firewall::get_instance().is_tcp_firewalled())
     {
         tag_list_size++;
         uint8_t kad_options = ((is_ack_requested ? 1 : 0) << 2 |
-			                   (Firewall::get_instance().is_tcp_firewalled() ? 1 : 0) << 1 |
-                               (Firewall::get_instance().is_udp_firewalled() ? 1 : 0));
+			                   (Firewall::get_instance().is_tcp_firewalled() ? 1 : 0) << 1);
 
         kad_options_tag = new Int8Tag(TAG_KADMISCOPTIONS, kad_options);
         packet_size += kad_options_tag->get_size();
@@ -307,7 +305,26 @@ bool Kad::process_hello_response(const unsigned char *buffer, uint32_t length, u
         }
         else
         {
-            assert(false);
+            // Forge an HELLO_RES_ACK packet
+            unsigned char *packet = new unsigned char[17];
+
+            unsigned char client_id_buffer[16];
+            _kad_client_id.to_buffer(client_id_buffer);
+            memcpy(&(packet[0]), client_id_buffer, 16);
+
+            // No tags
+            packet[16] = 0;
+
+            WriteLog("Sending " << LOG_MESSAGE_NAME("KADEMLIA2_HELLO_RES_ACK") << " to " << *contact);
+            send_kad_packet(contact->get_ip_address(),
+                            contact->get_udp_port(),
+                            contact->get_contact_id(),
+                            contact->get_udp_key(),
+                            KADEMLIA2_HELLO_RES_ACK,
+                            packet,
+                            17);
+
+            delete [] packet;
         }
     }
 
@@ -405,12 +422,7 @@ bool Kad::process_pong(const unsigned char *buffer, uint32_t length, uint32_t ip
     }
 
     if(Firewall::get_instance().external_port_needed())
-    {
         Firewall::get_instance().add_new_external_port(ip_address, *(uint16_t *)buffer);
-
-        if(Firewall::get_instance().udp_firewall_check_needed())
-            Firewall::get_instance().udp_firewall_query_again();
-    }
 
     return true;
 }
@@ -418,7 +430,7 @@ bool Kad::process_pong(const unsigned char *buffer, uint32_t length, uint32_t ip
 bool Kad::send_request(const Contact* contact, uint8_t max_responses, const uint128_t& target)
 {
     /*
-     * This packet MUST be at 33 bytes long:
+     * This packet MUST be 33 bytes long:
      *   1B contact count
      *  16B target ID
      *  16B contact ID
@@ -469,10 +481,6 @@ bool Kad::process_response(const unsigned char *buffer, uint32_t length, uint32_
         return false;
     }
 
-    bool is_a_firewall_check = false;
-    if(Firewall::get_instance().udp_firewall_check_needed() && Search::get_instance().is_firewall_check(target))
-        is_a_firewall_check = true;
-
     const unsigned char* contact_buffer;
     if(num_contacts) contact_buffer = buffer + 17;
 
@@ -486,32 +494,18 @@ bool Kad::process_response(const unsigned char *buffer, uint32_t length, uint32_
         uint16_t contact_tcp_port = *(uint16_t *)&(contact_buffer[22]);
         uint8_t contact_version = contact_buffer[24];
 
-        if(is_a_firewall_check)
-        {
-            Firewall::get_instance().add_possible_udp_test_contact(contact_id,
-                                                                   contact_ip,
-                                                                   contact_udp_port,
-                                                                   contact_tcp_port,
-                                                                   contact_version,
-                                                                   0,
-                                                                   false);
-        }
-        else
-        {
-            // Add it to the routing table
-            Contact* contact = new Contact(contact_id,
-                                           contact_ip,
-                                           contact_udp_port,
-                                           contact_tcp_port,
-                                           contact_version,
-                                           0,
-                                           false);
+        Contact* contact = new Contact(contact_id,
+                                       contact_ip,
+                                       contact_udp_port,
+                                       contact_tcp_port,
+                                       contact_version,
+                                       0,
+                                       false);
 
-            if(RoutingTable::get_instance().add(contact))
-                results.push_back(contact);
-            else
-                delete contact;
-        }
+        if(RoutingTable::get_instance().add(contact))
+            results.push_back(contact);
+        else
+            delete contact;
     }
 
     Search::get_instance().process_response(target, ip_address, udp_port, results);
@@ -566,9 +560,6 @@ void Kad::retrieve_and_dispatch_potential_packet()
             // Set the last packet receiving time
             set_last_contact();
             RoutingTable::get_instance().update_type_for_ip(saddr.sin_addr.s_addr, ntohs(saddr.sin_port));
-
-            // If necessary, start a lookup for a random node to find suitable IPs
-            Firewall::get_instance().udp_firewall_check();
 
             switch (type)
             {

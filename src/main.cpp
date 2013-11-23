@@ -43,8 +43,6 @@ int main()
     WriteLog("Added " << peer_list.size() << " nodes and " << bootstrap_list.size() << " bootstrap nodes");
 
     time_t next_routingtable_check = 0, next_searches_push = 0, next_big_timer = 0;
-    // time_t next_firewall_check = get_current_time() + 3600;
-    time_t next_firewall_check = get_current_time() + 60;
 
     while(active)
     {
@@ -54,13 +52,6 @@ int main()
 
         Kad::get_instance().retrieve_and_dispatch_potential_packet();
         TCPServer::get_instance().retrieve_and_dispatch_potential_packet();
-
-        // Should I check again the UDP firewall?
-        if(next_firewall_check <= now)
-        {
-            Firewall::get_instance().repeat_udp_firewall_check();
-            next_firewall_check = now + 3600;
-        }
 
         // Wake up all the pending searches
         if(next_searches_push <= now)

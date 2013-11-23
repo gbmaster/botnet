@@ -129,7 +129,6 @@ unsigned int Contact::fill_with_hello_data(unsigned char *buffer)
     const uint32_t support_source_ex2 = 1;
     const uint32_t support_captcha = 1;
     const uint32_t direct_udp_callback = Firewall::get_instance().is_tcp_firewalled() &&
-                                         Firewall::get_instance().is_udp_firewalled() &&
                                          Firewall::get_instance().external_udp_port_verified();
     const uint32_t file_id = 1;
     Int32Tag tag_misc_opt2(CT_EMULE_MISCOPTIONS2,

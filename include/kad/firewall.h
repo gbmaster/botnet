@@ -10,7 +10,6 @@
 #include "kad/uint128.h"
 
 #define MAXIMUM_KAD_TCP_FW_CHECKS 3
-#define MAXIMUM_KAD_UDP_FW_RESPONSES 2
 
 class Firewall
 {
@@ -44,24 +43,6 @@ class Firewall
             else
                 return false;
         }
-
-        /*
-         * Do we really need an UDP firewall check?
-         */
-        bool udp_firewall_check_needed() { return _udp_fw_responses < MAXIMUM_KAD_UDP_FW_RESPONSES; }
-
-        /*
-         * Starts an UDP firewall check
-         */
-        void udp_firewall_check();
-        void repeat_udp_firewall_check();
-        /*
-         * Sends an UDP firewall check request to the next candidate
-         */
-        void udp_firewall_query_again();
-
-
-        bool is_udp_firewalled() { return _is_udp_firewalled; }
 
         /*
          * Info about the external TCP port
